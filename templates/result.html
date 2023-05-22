@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Результат сканирования штрих-кода</title>
+</head>
+<body>
+    <h1>Результат сканирования штрих-кода</h1>
+    <p>Тип товара: {{ type_name }}</p>
+    <p>Скоропортящийся товар: {% if perishable %}Да{% else %}Нет{% endif %}</p>
+    <p>Размещение товара: {{ placement }}</p>
+</body>
+</html>

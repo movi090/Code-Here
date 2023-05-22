@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Добавить продукт</title>
+</head>
+<body>
+    <h1>Добавить продукт</h1>
+    <form method="POST" action="{{ url_for('add_product') }}">
+        <label for="category">Категория:</label>
+        <select id="category" name="category">
+            {% for category in categories %}
+            <option value="{{ category.code }}">{{ category.name }}</option>
+            {% endfor %}
+        </select><br>
+
+        <label for="type">Тип:</label>
+        <select id="type" name="type">
+            {% for type in types %}
+            <option value="{{ type.code }}">{{ type.name }}</option>
+            {% endfor %}
+        </select><br>
+
+        <label for="name">Название:</label>
+        <input type="text" id="name" name="name" required><br>
+
+        <label for="perishable">Скоропортящийся товар:</label>
+        <input type="checkbox" id="perishable" name="perishable"><br>
+
+        <input type="submit" value="Добавить">
+    </form>
+    <h2>Список продуктов</h2>
+    <ul>
+        {% for product in products %}
+        <li>{{ product.name }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
