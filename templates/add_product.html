@@ -1,38 +1,104 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Добавить продукт</title>
+    <title>Add Product</title>
 </head>
 <body>
-    <h1>Добавить продукт</h1>
-    <form method="POST" action="{{ url_for('add_product') }}">
-        <label for="category">Категория:</label>
+    <h1>Add Product</h1>
+    <form method="POST">
+        <label for="category">Category:</label>
         <select id="category" name="category">
             {% for category in categories %}
-            <option value="{{ category.code }}">{{ category.name }}</option>
+            <option value="{{ category.id }}">{{ category.name }}</option>
             {% endfor %}
-        </select><br>
+        </select>
+        <button type="button" onclick="addCategory()">Add Category</button>
+        <br><br>
 
-        <label for="type">Тип:</label>
+        <label for="type">Type:</label>
         <select id="type" name="type">
             {% for type in types %}
-            <option value="{{ type.code }}">{{ type.name }}</option>
+            <option value="{{ type.id }}">{{ type.name }}</option>
             {% endfor %}
-        </select><br>
+        </select>
+        <button type="button" onclick="addType()">Add Type</button>
+        <br><br>
 
-        <label for="name">Название:</label>
-        <input type="text" id="name" name="name" required><br>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required>
+        <br><br>
 
-        <label for="perishable">Скоропортящийся товар:</label>
-        <input type="checkbox" id="perishable" name="perishable"><br>
+        <label for="perishable">Perishable:</label>
+        <input type="checkbox" id="perishable" name="perishable">
+        <br><br>
 
-        <input type="submit" value="Добавить">
+        <button type="submit">Add Product</button>
     </form>
-    <h2>Список продуктов</h2>
-    <ul>
-        {% for product in products %}
-        <li>{{ product.name }}</li>
-        {% endfor %}
-    </ul>
+
+    <script>
+        function addCategory() {
+            var categoryName = prompt("Enter category name:");
+            if (categoryName) {
+                // Отправить запрос на сервер для добавления новой категории
+                fetch('/add_category', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: categoryName }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Если категория успешно добавлена, обновите список категорий на странице
+                        var categorySelect = document.getElementById('category');
+                        var newOption = document.createElement('option');
+                        newOption.value = data.category.id;
+                        newOption.text = data.category.name;
+                        categorySelect.add(newOption);
+                        alert('Category added successfully!');
+                    } else {
+                        alert('Failed to add category. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                });
+            }
+        }
+
+        function addType() {
+            var typeName = prompt("Enter type name:");
+            if (typeName) {
+                // Отправить запрос на сервер для добавления нового типа
+                fetch('/add_type', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: typeName }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Если тип успешно добавлен, обновите список типов на странице
+                        var typeSelect = document.getElementById('type');
+                        var newOption = document.createElement('option');
+                        newOption.value = data.type.id;
+                        newOption.text = data.type.name;
+                        typeSelect.add(newOption);
+                        alert('Type added successfully!');
+                    } else {
+                        alert('Failed to add type. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                });
+            }
+        }
+    </script>
 </body>
 </html>
