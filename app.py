@@ -1,32 +1,62 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from PIL import Image
 from pyzbar import pyzbar
-from flask_sqlalchemy import SQLAlchemy
 import random
 import string
+import sqlite3
+import flask
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///products.db'
-db = SQLAlchemy(app)
+DATABASE = 'instance/products.db'
 
-class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    barcode = db.Column(db.String(20), unique=True, nullable=False)
-    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
-    type_id = db.Column(db.Integer, db.ForeignKey('type.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    perishable = db.Column(db.Boolean, default=False)
+# Создание таблицы categories
+def create_categories_table():
+    with sqlite3.connect(DATABASE) as db:
+        cursor = db.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )''')
+        db.commit()
 
-    def __repr__(self):
-        return f"Product(barcode={self.barcode}, name={self.name}, perishable={self.perishable})"
+# Создание таблицы types
+def create_types_table():
+    with sqlite3.connect(DATABASE) as db:
+        cursor = db.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )''')
+        db.commit()
 
-class Category(db.Model):
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(100), nullable=False)
+# Создание таблицы products
+def create_products_table():
+    with sqlite3.connect(DATABASE) as db:
+        cursor = db.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER NOT NULL,
+            type_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            perishable INTEGER DEFAULT 0,
+            FOREIGN KEY (category_id) REFERENCES categories (id),
+            FOREIGN KEY (type_id) REFERENCES types (id)
+        )''')
+        db.commit()
 
-class Type(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+# Создание всех таблиц
+def create_tables():
+    create_categories_table()
+    create_types_table()
+    create_products_table()
+
+def get_db():
+    db = getattr(flask.g, '_database', None)
+    if db is None:
+        db = flask.g._database = sqlite3.connect(DATABASE)
+        db.execute('PRAGMA foreign_keys = ON')
+        db.commit()
+    return db
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -49,14 +79,21 @@ def process_barcode():
 
     type_id = barcode_data[1]
 
-    product = Product.query.filter_by(type_id=type_id).first()
+    with sqlite3.connect(DATABASE) as db:
+        db.execute('PRAGMA foreign_keys = ON')
+        db.commit()
+        cursor = db.cursor()
 
-    if product:
-        type_name = product.name
-        perishable = product.perishable
-    else:
-        type_name = "Неопределенный тип"
-        perishable = False
+        # Используйте конкретные запросы для работы с базой данных SQLite
+        cursor.execute('SELECT * FROM products WHERE type_id = ?', (type_id,))
+        product = cursor.fetchone()
+
+        if product:
+            type_name = product[3]
+            perishable = bool(product[4])
+        else:
+            type_name = "Неопределенный тип"
+            perishable = False
 
     if length <= 50 and width <= 50 and height <= 50:
         placement = "Полка"
@@ -68,12 +105,12 @@ def process_barcode():
     return render_template('result.html', type_name=type_name, perishable=perishable, placement=placement)
 
 def decode_barcode(barcode):
-    img = Image.open(barcode)
-    decoded_barcodes = pyzbar.decode(img)
+    with Image.open(barcode) as img:
+        decoded_barcodes = pyzbar.decode(img)
 
-    if decoded_barcodes:
-        barcode_data = decoded_barcodes[0].data.decode("utf-8")
-        return barcode_data
+        if decoded_barcodes:
+            barcode_data = decoded_barcodes[0].data.decode("utf-8")
+            return barcode_data
 
     return None
 
@@ -85,14 +122,30 @@ def add_product():
         name = request.form['name']
         perishable = bool(request.form.get('perishable'))
 
-        product = Product(category_id=category_id, type_id=type_id, name=name, perishable=perishable)
-        db.session.add(product)
-        db.session.commit()
+        with sqlite3.connect(DATABASE) as db:
+            db.execute('PRAGMA foreign_keys = ON')
+            db.commit()
+            cursor = db.cursor()
+
+            # Вставляем данные в таблицу "products"
+            cursor.execute('INSERT INTO products (category_id, type_id, name, perishable) VALUES (?, ?, ?, ?)',
+                           (category_id, type_id, name, perishable))
+            db.commit()
 
         return redirect(url_for('index'))
 
-    categories = Category.query.all()
-    types = Type.query.all()
+    with sqlite3.connect(DATABASE) as db:
+        db.execute('PRAGMA foreign_keys = ON')
+        db.commit()
+        cursor = db.cursor()
+
+        # Получаем список категорий и типов из базы данных
+        cursor.execute('SELECT id, name FROM categories')
+        categories = cursor.fetchall()
+
+        cursor.execute('SELECT id, name FROM types')
+        types = cursor.fetchall()
+
     return render_template('add_product.html', categories=categories, types=types)
 
 @app.route('/add_category', methods=['POST'])
@@ -102,24 +155,36 @@ def add_category():
     if not name:
         return jsonify({'success': False, 'error': 'Name is required'})
 
-    category = Category(name=name)
-    db.session.add(category)
-    db.session.commit()
+    with sqlite3.connect(DATABASE) as db:
+        db.execute('PRAGMA foreign_keys = ON')
+        db.commit()
+        cursor = db.cursor()
 
-    return jsonify({'success': True, 'category': {'id': category.id, 'name': category.name}})
+        # Вставляем данные в таблицу "categories"
+        db.execute('INSERT INTO categories (name) VALUES (?)', (name,))
+        db.commit()
+
+        category_id = cursor.lastrowid
+
+    return jsonify({'success': True, 'category': {'id': category_id, 'name': name}})
 
 @app.route('/add_type', methods=['POST'])
 def add_type():
     name = request.form.get('name')
 
-    product_type = Type(name=name)
-    db.session.add(product_type)
-    db.session.commit()
+    with sqlite3.connect(DATABASE) as db:
+        db.execute('PRAGMA foreign_keys = ON')
+        db.commit()
+        cursor = db.cursor()
 
-    return jsonify({'success': True, 'type': {'id': product_type.id, 'name': product_type.name}})
+        # Вставляем данные в таблицу "types"
+        cursor.execute('INSERT INTO types (name) VALUES (?)', (name,))
+        db.commit()
 
+        type_id = cursor.lastrowid
+
+    return jsonify({'success': True, 'type': {'id': type_id, 'name': name}})
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
+    create_tables()
     app.run(debug=True)
